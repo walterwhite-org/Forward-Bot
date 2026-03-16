@@ -4,7 +4,7 @@
 
 ![Typing SVG](https://readme-typing-svg.herokuapp.com/?lines=Welcome+To+Forward+Bot+!)
 
-## How To Deploy [Video Tutorial](https://youtu.be/@iqbaleditzzz)
+## How To Deploy [Video Tutorial](https://youtu.be/XnBzS4B6_gA)
 
 ## Features
 
