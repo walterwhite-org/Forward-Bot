@@ -13,6 +13,20 @@ from plugins.regix import restart_forwards
 # Subscribe YouTube Channel For Amazing Bot https://youtube.com/@Tech_VJ
 # Ask Doubt on telegram @KingVJ01
 
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot is alive!"
+
+def run():
+    app.run(host='0.0.0.0', port=10000)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.daemon = True
+    t.start()
+
 if __name__ == "__main__":
     VJBot = VJ(
         "VJ-Forward-Bot",
@@ -62,6 +76,7 @@ if __name__ == "__main__":
                 current += 1
                
     async def main():
+        keep_alive()  #
         await VJBot.start()
         bot_info  = await VJBot.get_me()
         await restart_forwards(VJBot)
