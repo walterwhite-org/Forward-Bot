@@ -9,3 +9,4 @@ dnspython==2.8.0
 umongo==3.0.1
 psutil==7.2.2
 pytz==2025.2
+flask
