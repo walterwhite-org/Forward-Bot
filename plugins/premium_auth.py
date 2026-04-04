@@ -11,7 +11,7 @@ users_col = db["PremiumStatus"]
 
 ᴀᴅᴍɪɴ_ɪᴅ = 7689365869 
 
-# --- ᴛᴇxᴛ ᴄᴏɴᴛᴇɴᴛ (ᴄᴜsᴛᴏᴍ ғᴏɴᴛ sᴛʏʟᴇ) ---
+# --- ᴛᴇxᴛ ᴄᴏɴᴛᴇɴᴛ ---
 ᴍᴀɪɴ_ᴘʀᴇᴍɪᴜᴍ_ᴛᴇxᴛ = """
 🎁 **ᴘʀᴇᴍɪᴜᴍ ꜰᴇᴀᴛᴜʀᴇs** 🎁
 
@@ -53,22 +53,53 @@ def payment_method_kb():
         [InlineKeyboardButton("⇆ ʙᴀᴄᴋ ᴛᴏ ᴘʀᴇᴍɪᴜᴍ ⇆", callback_data="premium_main")]
     ])
 
+# --- ᴄᴏᴍᴍᴀɴᴅ: /ᴍʏᴘʟᴀɴ ---
+@Client.on_message(filters.command("myplan") & filters.private)
+async def my_plan(client, message: Message):
+    user_id = message.from_user.id
+    user_data = await users_col.find_one({"user_id": user_id})
+    now = datetime.utcnow()
+
+    if not user_data:
+        return await message.reply_text("❌ **ʏᴏᴜ ᴅᴏɴ'ᴛ ʜᴀᴠᴇ ᴀɴʏ ᴀᴄᴛɪᴠᴇ ᴘʟᴀɴ.**\nᴜsᴇ /start ᴛᴏ sᴇᴇ ᴘʀᴇᴍɪᴜᴍ ᴏᴘᴛɪᴏɴs.")
+
+    if user_data.get("is_premium"):
+        expiry = user_data.get("expiry")
+        if expiry:
+            remaining = expiry - now
+            days = remaining.days
+            hours, remainder = divmod(remaining.seconds, 3600)
+            await message.reply_text(
+                f"🌟 **ʏᴏᴜʀ ᴘʀᴇᴍɪᴜᴍ ᴘʟᴀɴ** 🌟\n\n"
+                f"👤 **sᴛᴀᴛᴜs:** ᴀᴄᴛɪᴠᴇ ✅\n"
+                f"⏳ **ᴛɪᴍᴇ ʟᴇꜰᴛ:** {days} ᴅᴀʏs, {hours} ʜᴏᴜʀs\n"
+                f"📅 **ᴇxᴘɪʀᴇs ᴏɴ:** {expiry.strftime('%Y-%m-%d')}"
+            )
+        else:
+            await message.reply_text("👤 **sᴛᴀᴛᴜs:** ʟɪꜰᴇᴛɪᴍᴇ ᴘʀᴇᴍɪᴜᴍ ✅")
+    else:
+        trial_start = user_data.get("trial_start")
+        if trial_start and now < trial_start + timedelta(hours=1):
+            diff = (trial_start + timedelta(hours=1)) - now
+            mins = int(diff.seconds / 60)
+            await message.reply_text(f"🎁 **ꜰʀᴇᴇ ᴛʀɪᴀʟ sᴛᴀᴛᴜs**\n\n⏳ **ᴛɪᴍᴇ ʟᴇꜰᴛ:** {mins} ᴍɪɴᴜᴛᴇs")
+        else:
+            await message.reply_text("❌ **ʏᴏᴜʀ ᴘʟᴀɴ ʜᴀs ᴇxᴘɪʀᴇᴅ!**\nᴘʟᴇᴀsᴇ ᴜᴘɢʀᴀᴅᴇ ᴛᴏ ᴄᴏɴᴛɪɴᴜᴇ.")
+
 # --- ɢᴀᴛᴇᴋᴇᴇᴘᴇʀ ʟᴏɢɪᴄ ---
 @Client.on_message(filters.incoming & filters.private, group=-1)
 async def gatekeeper(client, message: Message):
     user_id = message.from_user.id
-    if user_id == ᴀᴅᴍɪɴ_ɪᴅ or (message.text and message.text.startswith(("/", "/start"))):
+    if user_id == ᴀᴅᴍɪɴ_ɪᴅ or (message.text and message.text.startswith(("/", "/start", "/myplan"))):
         return
     
     user_data = await users_col.find_one({"user_id": user_id})
     now = datetime.utcnow()
 
-    # 1. ɪꜰ ɴᴏ ᴅᴀᴛᴀ, sʜᴏᴡ ᴍᴇɴᴜ (ᴅᴏ ɴᴏᴛ sᴛᴀʀᴛ ᴛʀɪᴀʟ ʏᴇᴛ)
     if not user_data:
         await message.reply_text(ᴍᴀɪɴ_ᴘʀᴇᴍɪᴜᴍ_ᴛᴇxᴛ, reply_markup=main_premium_kb())
         raise StopPropagation
 
-    # 2. ᴄʜᴇᴄᴋ ᴘʀᴇᴍɪᴜᴍ
     if user_data.get("is_premium"):
         expiry = user_data.get("expiry")
         if expiry and now > expiry:
@@ -76,14 +107,9 @@ async def gatekeeper(client, message: Message):
         else:
             return
 
-    # 3. ᴄʜᴇᴄᴋ ᴛʀɪᴀʟ sᴛᴀᴛᴜs
     trial_start = user_data.get("trial_start")
-    if trial_start:
-        if now < trial_start + timedelta(hours=1):
-            return # ᴛʀɪᴀʟ sᴛɪʟʟ ᴀᴄᴛɪᴠᴇ
-        else:
-            # ᴛʀɪᴀʟ ᴇxᴘɪʀᴇᴅ
-            pass 
+    if trial_start and now < trial_start + timedelta(hours=1):
+        return 
 
     await message.reply_text(ᴍᴀɪɴ_ᴘʀᴇᴍɪᴜᴍ_ᴛᴇxᴛ, reply_markup=main_premium_kb())
     raise StopPropagation
@@ -103,7 +129,7 @@ async def cb_handler(client, query: CallbackQuery):
             await query.answer("❌ ʏᴏᴜ ʜᴀᴠᴇ ᴀʟʀᴇᴀᴅʏ ᴜsᴇᴅ ʏᴏᴜʀ ꜰʀᴇᴇ ᴛʀɪᴀʟ!", show_alert=True)
         else:
             await users_col.update_one({"user_id": user_id}, {"$set": {"trial_start": datetime.utcnow()}}, upsert=True)
-            await query.answer("✅ 1-ʜᴏᴜʀ ꜰʀᴇᴇ ᴛʀɪᴀʟ ᴀᴄᴛɪᴠᴀᴛᴇᴅ! ᴇɴᴊᴏʏ.", show_alert=True)
+            await query.answer("✅ 1-ʜᴏᴜʀ ꜰʀᴇᴇ ᴛʀɪᴀʟ ᴀᴄᴛɪᴠᴀᴛᴇᴅ!", show_alert=True)
             await query.message.delete()
 
     elif data == "buy_premium":
@@ -118,18 +144,16 @@ async def cb_handler(client, query: CallbackQuery):
         )
         
     elif data == "pay_star":
-        star_text = (
-            "⭐ **ᴘᴀʏᴍᴇɴᴛ ᴍᴇᴛʜᴏᴅ: ᴛᴇʟᴇɢʀᴀᴍ sᴛᴀʀs**\n\n"
-            "ɴᴏᴡ ʏᴏᴜ ᴄᴀɴ ʙᴜʏ ᴘʀᴇᴍɪᴜᴍ ᴜsɪɴɢ sᴛᴀʀs!\n\n"
-            "sᴇʟᴇᴄᴛ ʏᴏᴜʀ ᴀᴍᴏᴜɴᴛ ᴀɴᴅ ᴘᴜʀᴄʜᴀsᴇ 👇"
-        )
+        # ɴᴏᴛᴇ: ꜰᴏʀ ᴀᴜᴛᴏᴍᴀᴛɪᴄ sᴛᴀʀ ᴘᴀʏᴍᴇɴᴛs, ʏᴏᴜ ɴᴇᴇᴅ ᴛᴏ sᴇɴᴅ ᴀɴ ɪɴᴠᴏɪᴄᴇ. 
+        # ꜰᴏʀ ɴᴏᴡ, ᴛʜɪs ʟɪɴᴋs ᴛᴏ ᴀᴅᴍɪɴ ᴀs ʀᴇǫᴜᴇsᴛᴇᴅ ꜰᴏʀ sᴛᴀʀ ᴄᴏɴꜰɪʀᴍᴀᴛɪᴏɴ.
         star_kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("10 ⭐", url="https://t.me/Amirkhan_Adminbot"), InlineKeyboardButton("20 ⭐", url="https://t.me/Amirkhan_Adminbot")],
             [InlineKeyboardButton("40 ⭐", url="https://t.me/Amirkhan_Adminbot"), InlineKeyboardButton("55 ⭐", url="https://t.me/Amirkhan_Adminbot")],
             [InlineKeyboardButton("75 ⭐", url="https://t.me/Amirkhan_Adminbot")],
             [InlineKeyboardButton("⇆ ʙᴀᴄᴋ ⇆", callback_data="buy_premium")]
         ])
-        await query.message.edit_text(star_text, reply_markup=star_kb)
+        await query.message.edit_text("⭐ **ᴘᴀʏ ᴡɪᴛʜ sᴛᴀʀs**\n\nsᴇʟᴇᴄᴛ ᴘʟᴀɴ ʙᴇʟᴏᴡ:", reply_markup=star_kb)
+
 
 
 
