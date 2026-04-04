@@ -1,5 +1,5 @@
 from pyrogram import Client, filters, StopPropagation
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
+from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, LabeledPrice
 import motor.motor_asyncio
 from datetime import datetime, timedelta
 from config import Config
@@ -22,7 +22,7 @@ users_col = db["PremiumStatus"]
 ✨ **ᴢᴇʀᴏ ᴅᴇʟᴀʏ ʙᴇᴛᴡᴇᴇɴ ᴄʜᴀɴɴᴇʟs**
 ✨ **ꜰᴜʟʟ ᴀᴅᴍɪɴ sᴜᴘᴘᴏʀᴛ**
 
-💡 **ᴄʜᴇᴄᴋ ʏᴏᴜʀ ᴀᴄᴛɪᴠᴇ ᴘʟᴀɴ:** `/myplan`
+💡 **ᴄʜᴇᴄᴋ ʏᴏᴜʀ ᴀᴄᴛɪᴠᴇ ᴘʟᴀɴ:** /myplan
 """
 
 ᴘʟᴀɴ_ᴛᴇxᴛ = """
@@ -59,60 +59,37 @@ async def my_plan(client, message: Message):
     user_id = message.from_user.id
     user_data = await users_col.find_one({"user_id": user_id})
     now = datetime.utcnow()
+    
+    kb = InlineKeyboardMarkup([[InlineKeyboardButton("➕ ᴇxᴛᴇɴᴅ ᴘʟᴀɴ", callback_data="buy_premium")]])
 
     if not user_data:
-        return await message.reply_text("❌ **ʏᴏᴜ ᴅᴏɴ'ᴛ ʜᴀᴠᴇ ᴀɴʏ ᴀᴄᴛɪᴠᴇ ᴘʟᴀɴ.**\nᴜsᴇ /start ᴛᴏ sᴇᴇ ᴘʀᴇᴍɪᴜᴍ ᴏᴘᴛɪᴏɴs.")
+        return await message.reply_text("❌ **ʏᴏᴜ ᴅᴏɴ'ᴛ ʜᴀᴠᴇ ᴀɴʏ ᴀᴄᴛɪᴠᴇ ᴘʟᴀɴ.**", reply_markup=kb)
 
     if user_data.get("is_premium"):
         expiry = user_data.get("expiry")
         if expiry:
             remaining = expiry - now
-            days = remaining.days
-            hours, remainder = divmod(remaining.seconds, 3600)
+            if remaining.total_seconds() <= 0:
+                return await message.reply_text("❌ **ʏᴏᴜʀ ᴘʀᴇᴍɪᴜᴍ ʜᴀs ᴇxᴘɪʀᴇᴅ!**", reply_markup=kb)
+            
             await message.reply_text(
                 f"🌟 **ʏᴏᴜʀ ᴘʀᴇᴍɪᴜᴍ ᴘʟᴀɴ** 🌟\n\n"
                 f"👤 **sᴛᴀᴛᴜs:** ᴀᴄᴛɪᴠᴇ ✅\n"
-                f"⏳ **ᴛɪᴍᴇ ʟᴇꜰᴛ:** {days} ᴅᴀʏs, {hours} ʜᴏᴜʀs\n"
-                f"📅 **ᴇxᴘɪʀᴇs ᴏɴ:** {expiry.strftime('%Y-%m-%d')}"
+                f"⏳ **ᴛɪᴍᴇ ʟᴇꜰᴛ:** {remaining.days} ᴅᴀʏs\n"
+                f"📅 **ᴇxᴘɪʀᴇs ᴏɴ:** {expiry.strftime('%Y-%m-%d')}",
+                reply_markup=kb
             )
-        else:
-            await message.reply_text("👤 **sᴛᴀᴛᴜs:** ʟɪꜰᴇᴛɪᴍᴇ ᴘʀᴇᴍɪᴜᴍ ✅")
     else:
         trial_start = user_data.get("trial_start")
-        if trial_start and now < trial_start + timedelta(hours=1):
-            diff = (trial_start + timedelta(hours=1)) - now
-            mins = int(diff.seconds / 60)
-            await message.reply_text(f"🎁 **ꜰʀᴇᴇ ᴛʀɪᴀʟ sᴛᴀᴛᴜs**\n\n⏳ **ᴛɪᴍᴇ ʟᴇꜰᴛ:** {mins} ᴍɪɴᴜᴛᴇs")
+        if trial_start:
+            trial_end = trial_start + timedelta(hours=1)
+            if now < trial_end:
+                diff = trial_end - now
+                await message.reply_text(f"🎁 **ꜰʀᴇᴇ ᴛʀɪᴀʟ sᴛᴀᴛᴜs**\n\n⏳ **ᴛɪᴍᴇ ʟᴇꜰᴛ:** {int(diff.seconds / 60)} ᴍɪɴᴜᴛᴇs", reply_markup=kb)
+            else:
+                await message.reply_text("❌ **ʏᴏᴜʀ ꜰʀᴇᴇ ᴛʀɪᴀʟ ʜᴀs ᴇxᴘɪʀᴇᴅ!**", reply_markup=kb)
         else:
-            await message.reply_text("❌ **ʏᴏᴜʀ ᴘʟᴀɴ ʜᴀs ᴇxᴘɪʀᴇᴅ!**\nᴘʟᴇᴀsᴇ ᴜᴘɢʀᴀᴅᴇ ᴛᴏ ᴄᴏɴᴛɪɴᴜᴇ.")
-
-# --- ɢᴀᴛᴇᴋᴇᴇᴘᴇʀ ʟᴏɢɪᴄ ---
-@Client.on_message(filters.incoming & filters.private, group=-1)
-async def gatekeeper(client, message: Message):
-    user_id = message.from_user.id
-    if user_id == ᴀᴅᴍɪɴ_ɪᴅ or (message.text and message.text.startswith(("/", "/start", "/myplan"))):
-        return
-    
-    user_data = await users_col.find_one({"user_id": user_id})
-    now = datetime.utcnow()
-
-    if not user_data:
-        await message.reply_text(ᴍᴀɪɴ_ᴘʀᴇᴍɪᴜᴍ_ᴛᴇxᴛ, reply_markup=main_premium_kb())
-        raise StopPropagation
-
-    if user_data.get("is_premium"):
-        expiry = user_data.get("expiry")
-        if expiry and now > expiry:
-            await users_col.update_one({"user_id": user_id}, {"$set": {"is_premium": False}})
-        else:
-            return
-
-    trial_start = user_data.get("trial_start")
-    if trial_start and now < trial_start + timedelta(hours=1):
-        return 
-
-    await message.reply_text(ᴍᴀɪɴ_ᴘʀᴇᴍɪᴜᴍ_ᴛᴇxᴛ, reply_markup=main_premium_kb())
-    raise StopPropagation
+            await message.reply_text("❌ **ɴᴏ ᴀᴄᴛɪᴠᴇ ᴘʟᴀɴ ꜰᴏᴜɴᴅ.**", reply_markup=kb)
 
 # --- ᴄᴀʟʟʙᴀᴄᴋ ʜᴀɴᴅʟᴇʀ ---
 @Client.on_callback_query()
@@ -125,10 +102,11 @@ async def cb_handler(client, query: CallbackQuery):
     
     elif data == "activate_trial":
         user_data = await users_col.find_one({"user_id": user_id})
-        if user_data and user_data.get("trial_start"):
-            await query.answer("❌ ʏᴏᴜ ʜᴀᴠᴇ ᴀʟʀᴇᴀᴅʏ ᴜsᴇᴅ ʏᴏᴜʀ ꜰʀᴇᴇ ᴛʀɪᴀʟ!", show_alert=True)
+        # STRICT CHECK: If they have trial_start in DB, they can NEVER use it again
+        if user_data and "trial_start" in user_data:
+            await query.answer("❌ ʏᴏᴜ ʜᴀᴠᴇ ᴀʟʀᴇᴀᴅʏ ᴜsᴇᴅ ʏᴏᴜʀ ᴏɴᴇ-ᴛɪᴍᴇ ꜰʀᴇᴇ ᴛʀɪᴀʟ!", show_alert=True)
         else:
-            await users_col.update_one({"user_id": user_id}, {"$set": {"trial_start": datetime.utcnow()}}, upsert=True)
+            await users_col.update_one({"user_id": user_id}, {"$set": {"trial_start": datetime.utcnow(), "is_premium": False}}, upsert=True)
             await query.answer("✅ 1-ʜᴏᴜʀ ꜰʀᴇᴇ ᴛʀɪᴀʟ ᴀᴄᴛɪᴠᴀᴛᴇᴅ!", show_alert=True)
             await query.message.delete()
 
@@ -138,21 +116,33 @@ async def cb_handler(client, query: CallbackQuery):
     elif data == "pay_upi":
         qr_link = "https://jolly-sky-b8b7.rihanrazak765.workers.dev"
         await query.message.edit_text(
-            f"💳 **ᴘᴀʏᴍᴇɴᴛ ᴍᴇᴛʜᴏᴅ: ᴜᴘɪ**\n\n**ᴜᴘɪ ɪᴅ:** `hodystoll@upi` \n\n📸 **[ᴄʟɪᴄᴋ ᴛᴏ sᴄᴀɴ ǫʀ]({qr_link})**\n\n‼️ sᴇɴᴅ sᴄʀᴇᴇɴsʜᴏᴛ ᴛᴏ @Amirkhan_Adminbot ᴀꜰᴛᴇʀ ᴘᴀʏᴍᴇɴᴛ.",
+            f"💳 **ᴘᴀʏᴍᴇɴᴛ ᴍᴇᴛʜᴏᴅ: ᴜᴘɪ**\n\n**ᴜᴘɪ ɪᴅ:** `hodystoll@upi` \n\n📸 **[ᴄʟɪᴄᴋ ᴛᴏ sᴄᴀɴ ǫʀ]({qr_link})**\n\n‼️ sᴇɴᴅ sᴄʀᴇᴇɴsʜᴏᴛ ᴛᴏ @Amirkhan_Adminbot",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⇆ ʙᴀᴄᴋ ⇆", callback_data="buy_premium")]]),
             disable_web_page_preview=False
         )
         
     elif data == "pay_star":
-        # ɴᴏᴛᴇ: ꜰᴏʀ ᴀᴜᴛᴏᴍᴀᴛɪᴄ sᴛᴀʀ ᴘᴀʏᴍᴇɴᴛs, ʏᴏᴜ ɴᴇᴇᴅ ᴛᴏ sᴇɴᴅ ᴀɴ ɪɴᴠᴏɪᴄᴇ. 
-        # ꜰᴏʀ ɴᴏᴡ, ᴛʜɪs ʟɪɴᴋs ᴛᴏ ᴀᴅᴍɪɴ ᴀs ʀᴇǫᴜᴇsᴛᴇᴅ ꜰᴏʀ sᴛᴀʀ ᴄᴏɴꜰɪʀᴍᴀᴛɪᴏɴ.
+        # Direct Telegram Stars Invoice Buttons
         star_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("10 ⭐", url="https://t.me/Amirkhan_Adminbot"), InlineKeyboardButton("20 ⭐", url="https://t.me/Amirkhan_Adminbot")],
-            [InlineKeyboardButton("40 ⭐", url="https://t.me/Amirkhan_Adminbot"), InlineKeyboardButton("55 ⭐", url="https://t.me/Amirkhan_Adminbot")],
-            [InlineKeyboardButton("75 ⭐", url="https://t.me/Amirkhan_Adminbot")],
+            [InlineKeyboardButton("10 ⭐", callback_data="star_10"), InlineKeyboardButton("20 ⭐", callback_data="star_20")],
+            [InlineKeyboardButton("40 ⭐", callback_data="star_40"), InlineKeyboardButton("55 ⭐", callback_data="star_55")],
+            [InlineKeyboardButton("75 ⭐", callback_data="star_75")],
             [InlineKeyboardButton("⇆ ʙᴀᴄᴋ ⇆", callback_data="buy_premium")]
         ])
-        await query.message.edit_text("⭐ **ᴘᴀʏ ᴡɪᴛʜ sᴛᴀʀs**\n\nsᴇʟᴇᴄᴛ ᴘʟᴀɴ ʙᴇʟᴏᴡ:", reply_markup=star_kb)
+        await query.message.edit_text("⭐ **ᴘᴀʏ ᴡɪᴛʜ sᴛᴀʀs**\n\nsᴇʟᴇᴄᴛ ʏᴏᴜʀ ᴀᴍᴏᴜɴᴛ:", reply_markup=star_kb)
+
+    elif data.startswith("star_"):
+        amount = int(data.split("_")[1])
+        await client.send_invoice(
+            chat_id=user_id,
+            title="Premium Subscription",
+            description=f"Upgrade to Premium for {amount} Stars",
+            payload=f"premium_{amount}",
+            provider_token="", # Empty for Telegram Stars
+            currency="XTR",
+            prices=[LabeledPrice("Premium", amount)]
+        )
+
 
 
 
