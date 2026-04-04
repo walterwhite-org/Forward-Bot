@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from config import Config
 
 # Connect to your existing MongoDB Database
-db_client = motor.motor_asyncio.AsyncIOMotorClient(Config.DATABASE_URL) 
+db_client = motor.motor_asyncio.AsyncIOMotorClient(Config.DATABASE_URI) 
 db = db_client["ForwardBot"]
 users_col = db["PremiumStatus"]
 
