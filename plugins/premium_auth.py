@@ -1,6 +1,6 @@
 from pyrogram import Client, filters
 from pyrogram.types import Message
-from pyrogram.errors import StopPropagation
+from pyrogram import StopPropagation
 import motor.motor_asyncio
 from datetime import datetime, timedelta
 from config import Config
