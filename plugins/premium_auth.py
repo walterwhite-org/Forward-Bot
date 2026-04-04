@@ -1,22 +1,21 @@
-from pyrogram import Client, filters
-from pyrogram.types import Message
-from pyrogram import StopPropagation
+from pyrogram import Client, filters, StopPropagation
+from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 import motor.motor_asyncio
 from datetime import datetime, timedelta
 from config import Config
 
-# Connect to your existing MongoDB Database
-db_client = motor.motor_asyncio.AsyncIOMotorClient(Config.DATABASE_URI) 
+# Connect to MongoDB
+db_client = motor.motor_asyncio.AsyncIOMotorClient(Config.DATABASE_URI)
 db = db_client["ForwardBot"]
 users_col = db["PremiumStatus"]
 
-# === CHANGE THIS TO YOUR TELEGRAM ID ===
-ADMIN_ID = 7689365869  # Replace with your actual numeric Telegram User ID
+# === YOUR TELEGRAM ID ===
+ADMIN_ID = 7689365869 
 
 PREMIUM_TEXT = """
 🚫 **PREMIUM FEATURE ONLY** 🚫
 
-Your 1-Day Free Trial has ended, or you don't have an active Premium Subscription! You cannot use the forward features right now.
+Your 1-Hour Free Trial has ended, or your Premium Subscription has expired!
 
 💎 **PREMIUM PLANS:**
 • 1 Month - ₹50
@@ -26,86 +25,89 @@ Your 1-Day Free Trial has ended, or you don't have an active Premium Subscriptio
 
 💳 **Payment UPI:** `hodystoll@upi`
 
-After payment, send a screenshot to the Admin to activate your premium!
-👨‍💻 **Contact Admin:** @Amirkhan_Adminbot
-📢 **Channel:** @HodyStoll
+After payment, send a screenshot to the Admin!
 """
 
 # ==========================================
-# ADMIN COMMANDS TO MANAGE USERS
+# ADMIN COMMANDS (Timed Access)
 # ==========================================
 
 @Client.on_message(filters.command("addprem") & filters.user(ADMIN_ID))
 async def add_premium(client, message: Message):
-    if len(message.command) != 2:
-        return await message.reply_text("Usage: `/addprem UserID`")
+    if len(message.command) != 3:
+        return await message.reply_text("Usage: `/addprem UserID Days` \nExample: `/addprem 12345 30`")
     
-    target_id = int(message.command[1])
-    await users_col.update_one(
-        {"user_id": target_id}, 
-        {"$set": {"is_premium": True}}, 
-        upsert=True
-    )
-    await message.reply_text(f"✅ User `{target_id}` has been granted Premium Access!")
+    try:
+        target_id = int(message.command[1])
+        days = int(message.command[2])
+        expiry_date = datetime.utcnow() + timedelta(days=days)
+        
+        await users_col.update_one(
+            {"user_id": target_id}, 
+            {"$set": {"is_premium": True, "expiry": expiry_date}}, 
+            upsert=True
+        )
+        await message.reply_text(f"✅ User `{target_id}` granted Premium for {days} days!\nExpires: {expiry_date.strftime('%Y-%m-%d')}")
+    except ValueError:
+        await message.reply_text("Invalid ID or Days. Use numbers only.")
 
 @Client.on_message(filters.command("rmprem") & filters.user(ADMIN_ID))
 async def remove_premium(client, message: Message):
     if len(message.command) != 2:
         return await message.reply_text("Usage: `/rmprem UserID`")
-    
     target_id = int(message.command[1])
-    await users_col.update_one(
-        {"user_id": target_id}, 
-        {"$set": {"is_premium": False}}, 
-        upsert=True
-    )
-    await message.reply_text(f"❌ User `{target_id}` Premium Access revoked.")
+    await users_col.update_one({"user_id": target_id}, {"$set": {"is_premium": False, "expiry": None}}, upsert=True)
+    await message.reply_text(f"❌ User `{target_id}` Premium revoked.")
 
 # ==========================================
-# THE GATEKEEPER (Checks trials & premium)
+# GATEKEEPER (1-Hour Trial & Expiry Check)
 # ==========================================
 
-# group=-1 means this runs BEFORE your normal forward plugins
 @Client.on_message(filters.incoming & filters.private, group=-1)
 async def gatekeeper(client, message: Message):
+    user_id = message.from_user.id
     text = message.text or ""
     
-    # Let basic commands pass without checking premium
+    # Allow help/start commands
     if text.startswith(("/start", "/help", "/addprem", "/rmprem")):
         return 
 
-    user_id = message.from_user.id
-    
-    # Admin is always allowed
+    # Admin bypass
     if user_id == ADMIN_ID:
         return 
         
     user_data = await users_col.find_one({"user_id": user_id})
     now = datetime.utcnow()
 
-    # 1. NEW USER? Start their 1-day trial
+    # 1. NEW USER? Start 1-hour trial
     if not user_data:
         await users_col.insert_one({
-            "user_id": user_id,
-            "is_premium": False,
+            "user_id": user_id, 
+            "is_premium": False, 
             "trial_start": now
         })
-        await message.reply_text("🎉 **Your 1-Day Free Trial has started!** You can use the forward features for the next 24 hours.")
-        return # Let them pass
-
-    # 2. IS PREMIUM? Let them pass
-    if user_data.get("is_premium") == True:
         return 
+
+    # 2. CHECK PREMIUM EXPIRY
+    if user_data.get("is_premium"):
+        expiry = user_data.get("expiry")
+        if expiry and now > expiry:
+            # Subscription expired
+            await users_col.update_one({"user_id": user_id}, {"$set": {"is_premium": False}})
+        else:
+            return # Still valid premium
         
-    # 3. CHECK TRIAL EXPIRY
+    # 3. CHECK TRIAL EXPIRY (1 Hour)
     trial_start = user_data.get("trial_start")
-    if trial_start:
-        # If current time is less than trial start + 24 hours, they are still in trial
-        if now < trial_start + timedelta(days=1):
-            return # Let them pass
+    if trial_start and now < trial_start + timedelta(hours=1):
+        return 
             
-    # 4. IF WE REACH HERE: Trial is over and they are not premium.
-    await message.reply_text(PREMIUM_TEXT)
-    
-    # This magic command completely stops the bot from forwarding their message!
-    raise StopPropagation 
+    # 4. IF EXPIRED: Show Menu with Buttons
+    await message.reply_text(
+        text=PREMIUM_TEXT,
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("💳 Pay / Contact Admin", url="https://t.me/Amirkhan_Adminbot")],
+            [InlineKeyboardButton("📢 Join Channel", url="https://t.me/HodyStoll")]
+        ])
+    )
+    raise StopPropagation
